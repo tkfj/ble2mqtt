@@ -10,11 +10,13 @@ services:
 
     # LinuxでBLEを使うための設定（DBus共有＋hostネットワーク）
     network_mode: host
+    privileged: true 
     volumes:
       - ..:/workspaces/workspace:cached     # ← リポジトリをマウント（必須）
       - /var/run/dbus:/var/run/dbus
     environment:
       - MQTT_BROKER=tcp://127.0.0.1:11883
+      - DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/dbus/system_bus_socket  # system bus を明示
     cap_add:
       - NET_ADMIN
     working_dir: /workspaces/workspace
