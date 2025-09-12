@@ -1,0 +1,22 @@
+{
+  "name": "Java BLE+MQTT Dev (Compose)",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+
+  // ★ VS Code が開くワークスペースの“中”のパス
+  "workspaceFolder": "/workspaces/workspace",
+
+  "overrideCommand": false,
+  "remoteUser": "vscode",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "vscjava.vscode-java-pack",
+        "vscjava.vscode-maven",
+        "redhat.vscode-yaml",
+        "eamodio.gitlens"
+      ]
+    }
+  },
+  "postCreateCommand": "java -version && mvn -v && (bluetoothctl --version || true)"
+}

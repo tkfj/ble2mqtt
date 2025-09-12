@@ -1,0 +1,29 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # ★ 常駐させる（Dev Containersが接続できるように）
+    command: ["sleep", "infinity"]
+    init: true
+    tty: true
+
+    # LinuxでBLEを使うための設定（DBus共有＋hostネットワーク）
+    network_mode: host
+    volumes:
+      - ..:/workspaces/workspace:cached     # ← リポジトリをマウント（必須）
+      - /var/run/dbus:/var/run/dbus
+    environment:
+      - MQTT_BROKER=tcp://127.0.0.1:11883
+    cap_add:
+      - NET_ADMIN
+    working_dir: /workspaces/workspace
+    depends_on:
+      - mosquitto
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    network_mode: host
+    volumes:
+      - ./mosquitto:/mosquitto/config:ro
+    restart: unless-stopped
