@@ -33,7 +33,7 @@ public interface LibC {
     public void start() {
         if (running) return;
         // sockaddr_hci
-        jnr.ffi.Runtime rt = jnr.ffi.Runtime.getSystemRuntime();
+        jnr.ffi.Runtime rt = jnr.ffi.Runtime.getSystemRuntime(); // java.lang.Runtimeと名前がかぶるので完全修飾名
         Pointer sa = Memory.allocate(rt, 6); // sa_family(2) + dev(2) + channel(2)
         sa.putShort(0, (short)AF_BLUETOOTH);
         sa.putShort(2, HCI_DEV_NONE);
@@ -50,14 +50,16 @@ public interface LibC {
         System.out.println("[HCI] monitor started (no subprocess).");
     }
 
-    @Override public void close() {
+    @Override
+    public void close() {
         running = false;
         try { th.join(300); } catch (InterruptedException ignore) {}
         if (fd >= 0) LibC.INSTANCE.close(fd);
         fd = -1;
     }
 
-    @Override public void run() {
+    @Override
+    public void run() {
         jnr.ffi.Runtime rt = jnr.ffi.Runtime.getSystemRuntime();
         Pointer buf = Memory.allocate(rt, 4096);
         while (running) {
