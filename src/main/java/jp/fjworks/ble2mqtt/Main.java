@@ -14,7 +14,7 @@ public class Main {
 
     CountDownLatch quit = new CountDownLatch(1);
     MqttSubscriber sub = new MqttSubscriber(cfg);
-    HciSniffer hci = new HciSniffer();
+    HciMonitor hci = new HciMonitor();
 
     Runtime.getRuntime().addShutdownHook(new Thread(() -> {
       try { sub.close(); } catch (Exception ignore) {}
