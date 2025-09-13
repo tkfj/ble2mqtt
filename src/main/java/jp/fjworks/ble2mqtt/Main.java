@@ -14,16 +14,31 @@ public class Main {
 
     CountDownLatch quit = new CountDownLatch(1);
     MqttSubscriber sub = new MqttSubscriber(cfg);
-    HciMonitor hci = new HciMonitor();
+
+    String hciIndex = System.getenv().getOrDefault("BLE_HCI_INDEX", "0");
+    boolean manageScan = "1".equals(System.getenv().getOrDefault("BLE_MANAGE_SCAN", "1"));
+
+    BluezScanControl scanCtrl = manageScan ?  BluezScanControl.withDefaults(hciIndex) : null;
+    if (scanCtrl != null) {
+      try { scanCtrl.ensureScanning(); }
+      catch (Exception e) {
+        System.err.println("[DBus] ensureScanning failed: " + e.getMessage());
+      }
+    }
+
+    // 既存: HciMonitor や MQTT ブリッジの起動…
+    HciMonitor hciMon = new HciMonitor();
+    hciMon.start();
 
     Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+      try { hciMon.close(); } catch (Exception ignore) {}
+      try { if (scanCtrl != null) scanCtrl.close(); } catch (Exception ignore) {}
       try { sub.close(); } catch (Exception ignore) {}
-      try { hci.close(); } catch (Exception ignore) {}
       quit.countDown();
     }, "shutdown"));
 
     sub.start(cfg);
-    hci.start();
+    hciMon.start();
     runPublisher(cfg); // 単発/周期は環境変数で制御（下の MqttCfg 参照）
     quit.await();
   }
