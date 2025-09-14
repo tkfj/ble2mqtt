@@ -113,8 +113,23 @@ public interface LibC {
             int rssi    = (byte)p.getByte(pos); pos++;
             len -= (1+1+6+1+dlen+1);
 
-            System.out.printf("{\"src\":\"hci\",\"addr\":\"%s\",\"rssi\":%d,\"raw\":\"%s\",\"ts\":\"%s\"}%n",
-                    addr, rssi, data, Instant.now());
+            MfgInfo mfg = findMfg(data);
+
+            // JSON出力（mfgがあれば追加）
+            String json;
+            if (mfg != null) {
+                json = String.format(
+                "{\"src\":\"hci\",\"addr\":\"%s\",\"rssi\":%d,"
+                + "\"mfg\":{\"cid\":\"0x%04X\",\"data\":\"%s\"},"
+                + "\"raw\":\"%s\",\"ts\":\"%s\"}",
+                addr, rssi, mfg.cid, mfg.dataHex, data, java.time.Instant.now());
+            } else {
+                json = String.format(
+                "{\"src\":\"hci\",\"addr\":\"%s\",\"rssi\":%d,"
+                + "\"raw\":\"%s\",\"ts\":\"%s\"}",
+                addr, rssi, data, java.time.Instant.now());
+            }
+            System.out.println(json);
         }
     }
 
@@ -137,9 +152,24 @@ public interface LibC {
             String data  = hex(p, pos, dlen); pos+=dlen;
             len -= (2+1+6+1+1+1+1+1+2+1+6+1+dlen);
 
-            System.out.printf("{\"src\":\"hci\",\"addr\":\"%s\",\"rssi\":%d,\"tx\":%d,"
-                    + "\"etype\":%d,\"sid\":%d,\"raw\":\"%s\",\"ts\":\"%s\"}%n",
-                    addr, rssi, tx, type, sid, data, Instant.now());
+            // 追加: Manufacturer を抽出
+            MfgInfo mfg = findMfg(data);
+
+            // JSON出力（mfgがあれば追加）
+            String json;
+            if (mfg != null) {
+                json = String.format(
+                "{\"src\":\"hci\",\"addr\":\"%s\",\"rssi\":%d,"
+                + "\"mfg\":{\"cid\":\"0x%04X\",\"data\":\"%s\"},"
+                + "\"raw\":\"%s\",\"ts\":\"%s\"}",
+                addr, rssi, mfg.cid, mfg.dataHex, data, java.time.Instant.now());
+            } else {
+                json = String.format(
+                "{\"src\":\"hci\",\"addr\":\"%s\",\"rssi\":%d,"
+                + "\"raw\":\"%s\",\"ts\":\"%s\"}",
+                addr, rssi, data, java.time.Instant.now());
+            }
+            System.out.println(json);
         }
     }
 
@@ -154,5 +184,47 @@ public interface LibC {
         String data = hex(p, pos, dlen);
         System.out.printf("{\"src\":\"hci\",\"per\":%d,\"rssi\":%d,\"tx\":%d,\"raw\":\"%s\",\"ts\":\"%s\"}%n",
                 sync, rssi, tx, data, Instant.now());
+    }
+
+
+    // 16進 → byte[]
+    private static byte[] hexToBytes(String hex) {
+        int n = hex.length();
+        byte[] out = new byte[n/2];
+        for (int i = 0; i < n; i += 2) {
+            out[i/2] = (byte) Integer.parseInt(hex.substring(i, i+2), 16);
+        }
+        return out;
+    }
+
+    // ADデータ（連結TLV）から 0xFF を探して CID と残りペイロードを返す
+    private static class MfgInfo { final int cid; final String dataHex;
+        MfgInfo(int cid, String dataHex){ this.cid=cid; this.dataHex=dataHex; } }
+
+    private static MfgInfo findMfg(String adHex) {
+        if (adHex == null || adHex.isEmpty()) return null;
+        byte[] b = hexToBytes(adHex);
+        for (int i = 0; i < b.length; ) {
+            int len = b[i++] & 0xFF;             // L
+            if (len == 0) break;
+            if (i + len > b.length) break;       // 破損ガード
+            int type = b[i++] & 0xFF;            // T
+            int dlen = len - 1;                  // V長
+            if (type == 0xFF && dlen >= 2) {
+                int cid = (b[i] & 0xFF) | ((b[i+1] & 0xFF) << 8); // Little Endian
+                int rest = dlen - 2;
+                String dataHex = rest > 0 ? toHex(b, i + 2, rest) : "";
+                return new MfgInfo(cid, dataHex);
+            }
+            i += dlen; // 次のADへ
+        }
+        return null;
+    }
+
+    // 既存の hex() が Pointer用なら、byte[] 用の toHex も用意
+    private static String toHex(byte[] b, int off, int len) {
+        StringBuilder sb = new StringBuilder(len*2);
+        for (int k=0;k<len;k++) sb.append(String.format("%02x", b[off+k]));
+        return sb.toString();
     }
 }
