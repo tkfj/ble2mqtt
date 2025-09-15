@@ -67,17 +67,11 @@ public final class HciMonitor implements AutoCloseable, Runnable {
         final int MEM_SIZE = 4096;
         jnr.ffi.Runtime rt = jnr.ffi.Runtime.getSystemRuntime();
         Pointer buf = Memory.allocate(rt, MEM_SIZE);
+        ByteBuffer bbuf = ByteBuffer.wrap((byte[])buf.array()).order(ByteOrder.LITTLE_ENDIAN);
         AdvParsers parser = AdvParsers.getInstance();
         while (running) {
             int n = LibC.INSTANCE.read(fd, buf, MEM_SIZE);
             if (n <= 0) continue; //TODO NIO的な待ちかたをさせたい。たぶんサイズ１のブロッキングキューに突っ込むが正解。（でも空ループは止まらないのでは。）
-            ByteBuffer bbuf;
-            if(buf.hasArray()) {
-                bbuf = ByteBuffer.wrap((byte[])buf.array()).order(ByteOrder.LITTLE_ENDIAN);
-            }else {
-                bbuf = ByteBuffer.wrap(new byte[(int)buf.size()]).order(ByteOrder.LITTLE_ENDIAN);
-                buf.get(0, bbuf.array(), 0,(int)buf.size());
-            }
 
             // parse monitor header
             int op   = Short.toUnsignedInt(bbuf.getShort(0));   // opcode
