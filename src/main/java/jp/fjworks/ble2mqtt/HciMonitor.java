@@ -89,6 +89,9 @@ public final class HciMonitor implements AutoCloseable, Runnable {
             // HCI Event packet begins here: evt(1), plen(1), params...
 
             Collection<Adv> advs = parser.parse(bbuf, off);
+            for(Adv adv: advs) {
+                System.out.println(adv.toJsonString());
+            }
         }
     }
 

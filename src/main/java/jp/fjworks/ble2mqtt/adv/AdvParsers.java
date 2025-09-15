@@ -32,13 +32,17 @@ public class AdvParsers {
     public Collection<Adv> parse(ByteBuffer bbuf, int offset) {
 
         int evt  = bbuf.get(offset++) & 0xFF;
+        // System.out.printf("evt: 0x%02x\n",evt);
         if (evt != 0x3E /* LE Meta */) return null; //TODO もうちょっとマシな返しを
         int len = bbuf.get(offset++) & 0xFF;
+        // System.out.printf("len: 0x%02x\n",len);
         int subevt = bbuf.get(offset++) & 0xFF;
+        // System.out.printf("subevt: 0x%02x\n",subevt);
         if(parserMap.containsKey(Integer.valueOf(subevt))) {
             return parserMap.get(subevt).parse(bbuf, offset, len);
         }
         else {
+            System.out.println("not supported.");
             return null;//TODO もうちょっとマシな返しを
         }
     }

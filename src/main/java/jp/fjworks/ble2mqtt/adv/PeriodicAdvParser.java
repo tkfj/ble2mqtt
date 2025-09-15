@@ -23,6 +23,13 @@ public class PeriodicAdvParser extends BaseAdvParser implements AdvParser {
             public int getTotalLength() {
                 return 7+dlen;
             }
+
+            @Override
+            public String toJsonString() {
+                return String.format(
+                    "{\"src\":\"hci\",\"type\":\"periodic\",\"rssi\":%d,\"structure\":%s,\"raw\":\"%s\",\"ts\":\"%s\"}",
+                    rssi, AdStructure.toJsonString(adStructures), hex(data, 0, dlen), java.time.Instant.now());
+            }
         });
     }
 

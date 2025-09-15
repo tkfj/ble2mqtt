@@ -6,12 +6,13 @@ import java.util.Collection;
 import java.util.List;
 
 public class ExtendedAdvParser extends BaseAdvParser implements AdvParser {
-    private int[] supportedTypes = new int[] { 0x0f };
+    private int[] supportedTypes = new int[] { 0x0d };
     
     @Override
     public Collection<Adv> parse(ByteBuffer bbuf, int offset, int len) {
         if (len < 1) throw new IllegalArgumentException(String.format("invalid len: %d",len));
         int num = bbuf.get(offset++) & 0xFF; len--;
+        // System.out.printf("num: %d",num);
         List<Adv> results = new ArrayList<Adv>();
         for (int i=0;i<num;i++) {
             Adv adv = parseOne(bbuf,offset,len-1);
@@ -40,16 +41,17 @@ public class ExtendedAdvParser extends BaseAdvParser implements AdvParser {
 
         Collection<AdStructure> adStructures = AdStructure.parse(data);
 
-        String json = String.format(
-            "{\"src\":\"hci\",\"type\":\"Extended\",\"addr\":\"%s\",\"rssi\":%d,"
-            + "\"structure\":%s,"
-            + "\"raw\":\"%s\",\"ts\":\"%s\"}",
-            addr, rssi, AdStructure.toJsonString(adStructures), hex(data, 0, dlen), java.time.Instant.now());
-        System.out.println(json);
         return new Adv() {
             @Override
             public int getTotalLength() {
                 return totallength;
+            }
+
+            @Override
+            public String toJsonString() {
+                return String.format(
+                    "{\"type\":\"extended\",\"addr\":\"%s\",\"rssi\":%d,\"structure\":%s,\"raw\":\"%s\",\"ts\":\"%s\"}",
+                    addr, rssi, AdStructure.toJsonString(adStructures), hex(data, 0, dlen), java.time.Instant.now());
             }
         };
     }

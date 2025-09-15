@@ -34,16 +34,16 @@ public class LegacyAdvParser extends BaseAdvParser implements AdvParser {
 
         Collection<AdStructure> adStructures = AdStructure.parse(data);
 
-        String json = String.format(
-            "{\"src\":\"hci\",\"type\":\"Extended\",\"addr\":\"%s\",\"rssi\":%d,"
-            + "\"structure\":%s,"
-            + "\"raw\":\"%s\",\"ts\":\"%s\"}",
-            addr, rssi, AdStructure.toJsonString(adStructures), hex(data, 0, dlen), java.time.Instant.now());
-        System.out.println(json);
         return new Adv() {
             @Override
             public int getTotalLength() {
                 return totallength;
+            }
+            @Override
+            public String toJsonString() {
+                return String.format(
+                    "{\"type\":\"legacy\",\"addr\":\"%s\",\"rssi\":%d,\"structure\":%s,\"raw\":\"%s\",\"ts\":\"%s\"}",
+                    addr, rssi, AdStructure.toJsonString(adStructures), hex(data, 0, dlen), java.time.Instant.now());
             }
         };
     }
