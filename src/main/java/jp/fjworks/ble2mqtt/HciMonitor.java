@@ -1,14 +1,18 @@
 package jp.fjworks.ble2mqtt;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.Collection;
+
 import jnr.ffi.LibraryLoader;
 import jnr.ffi.Memory;
 import jnr.ffi.Pointer;
-
-import java.time.Instant;
+import jp.fjworks.ble2mqtt.adv.Adv;
+import jp.fjworks.ble2mqtt.adv.AdvParsers;
 
 public final class HciMonitor implements AutoCloseable, Runnable {
     // ---- libc bindings ----
-public interface LibC {
+    public interface LibC {
         LibC INSTANCE = LibraryLoader.create(LibC.class).load("c");
         int socket(int domain, int type, int protocol);
         int bind(int sockfd, Pointer addr, int addrlen);
@@ -47,7 +51,7 @@ public interface LibC {
         running = true;
         th.setDaemon(true);
         th.start();
-        System.out.println("[HCI] monitor started (no subprocess).");
+        System.out.println("[HCI] monitor started.");
     }
 
     @Override
@@ -60,171 +64,32 @@ public interface LibC {
 
     @Override
     public void run() {
+        final int MEM_SIZE = 4096;
         jnr.ffi.Runtime rt = jnr.ffi.Runtime.getSystemRuntime();
-        Pointer buf = Memory.allocate(rt, 4096);
+        Pointer buf = Memory.allocate(rt, MEM_SIZE);
+        AdvParsers parser = AdvParsers.getInstance();
         while (running) {
-            int n = LibC.INSTANCE.read(fd, buf, 4096);
-            if (n <= 0) continue;
+            int n = LibC.INSTANCE.read(fd, buf, MEM_SIZE);
+            if (n <= 0) continue; //TODO NIO的な待ちかたをさせたい。たぶんサイズ１のブロッキングキューに突っ込むが正解。（でも空ループは止まらないのでは。）
+            ByteBuffer bbuf;
+            if(buf.hasArray()) {
+                bbuf = ByteBuffer.wrap((byte[])buf.array()).order(ByteOrder.LITTLE_ENDIAN);
+            }else {
+                bbuf = ByteBuffer.wrap(new byte[(int)buf.size()]).order(ByteOrder.LITTLE_ENDIAN);
+                buf.get(0, bbuf.array(), 0,(int)buf.size());
+            }
 
             // parse monitor header
-            int op   = Short.toUnsignedInt(buf.getShort(0));   // opcode
-            int idx  = Short.toUnsignedInt(buf.getShort(2));   // index (unused here)
-            int len  = Short.toUnsignedInt(buf.getShort(4));   // payload length
+            int op   = Short.toUnsignedInt(bbuf.getShort(0));   // opcode
+            int idx  = Short.toUnsignedInt(bbuf.getShort(2));   // index (unused here)
+            int len  = Short.toUnsignedInt(bbuf.getShort(4));   // payload length
             if (MON_OPCODE_EVENT != op || n < MON_HDR_SIZE + len) continue;
 
             int off = MON_HDR_SIZE;
             // HCI Event packet begins here: evt(1), plen(1), params...
-            int evt  = buf.getByte(off) & 0xFF;
-            int plen = buf.getByte(off+1) & 0xFF;
-            if (evt != 0x3E /* LE Meta */) continue;
 
-            int subevt = buf.getByte(off+2) & 0xFF;
-            if (subevt == 0x02) { // LE Advertising Report
-                parseLegacyAdv(buf, off+3, plen-1);
-            } else if (subevt == 0x0D) { // LE Extended Advertising Report
-                parseExtAdv(buf, off+3, plen-1);
-            } else if (subevt == 0x0F) { // LE Periodic Advertising Report
-                parsePerAdv(buf, off+3, plen-1);
-            }
+            Collection<Adv> advs = parser.parse(bbuf, off);
         }
     }
 
-    private static String hex(Pointer p, int pos, int len) {
-        StringBuilder sb = new StringBuilder(len*2);
-        for (int i=0;i<len;i++) sb.append(String.format("%02x", p.getByte(pos+i)));
-        return sb.toString();
-    }
-    private static String mac(Pointer p, int pos) { // little-endian in HCI
-        return String.format("%02X:%02X:%02X:%02X:%02X:%02X",
-                p.getByte(pos+5)&0xFF, p.getByte(pos+4)&0xFF, p.getByte(pos+3)&0xFF,
-                p.getByte(pos+2)&0xFF, p.getByte(pos+1)&0xFF, p.getByte(pos)&0xFF);
-    }
-
-    // --- parsers (最小限: addr / rssi / AD生データ) ---
-    private void parseLegacyAdv(Pointer p, int pos, int len) {
-        int num = p.getByte(pos) & 0xFF; pos++; len--;
-        for (int i=0;i<num;i++) {
-            if (len < 10) return;
-            int evtType = p.getByte(pos) & 0xFF; pos++;
-            int addrType= p.getByte(pos) & 0xFF; pos++;
-            String addr = mac(p, pos); pos += 6;
-            int dlen    = p.getByte(pos) & 0xFF; pos++;
-            String data = hex(p, pos, dlen); pos += dlen;
-            int rssi    = (byte)p.getByte(pos); pos++;
-            len -= (1+1+6+1+dlen+1);
-
-            MfgInfo mfg = findMfg(data);
-
-            // JSON出力（mfgがあれば追加）
-            String json;
-            if (mfg != null) {
-                json = String.format(
-                "{\"src\":\"hci\",\"addr\":\"%s\",\"rssi\":%d,"
-                + "\"mfg\":{\"cid\":\"0x%04X\",\"data\":\"%s\"},"
-                + "\"raw\":\"%s\",\"ts\":\"%s\"}",
-                addr, rssi, mfg.cid, mfg.dataHex, data, java.time.Instant.now());
-            } else {
-                json = String.format(
-                "{\"src\":\"hci\",\"addr\":\"%s\",\"rssi\":%d,"
-                + "\"raw\":\"%s\",\"ts\":\"%s\"}",
-                addr, rssi, data, java.time.Instant.now());
-            }
-            System.out.println(json);
-        }
-    }
-
-    private void parseExtAdv(Pointer p, int pos, int len) {
-        int num = p.getByte(pos) & 0xFF; pos++; len--;
-        for (int i=0;i<num;i++) {
-            if (len < 24) return;
-            int type     = Short.toUnsignedInt(p.getShort(pos)); pos+=2;
-            int addrType = p.getByte(pos++) & 0xFF;
-            String addr  = mac(p, pos); pos+=6;
-            int priPhy   = p.getByte(pos++) & 0xFF;
-            int secPhy   = p.getByte(pos++) & 0xFF;
-            int sid      = p.getByte(pos++) & 0xFF;
-            int tx       = (byte)p.getByte(pos++); // dBm
-            int rssi     = (byte)p.getByte(pos++);
-            int interval = Short.toUnsignedInt(p.getShort(pos)); pos+=2;
-            int daddrT   = p.getByte(pos++) & 0xFF;
-            String daddr = mac(p, pos); pos+=6;
-            int dlen     = p.getByte(pos++) & 0xFF;
-            String data  = hex(p, pos, dlen); pos+=dlen;
-            len -= (2+1+6+1+1+1+1+1+2+1+6+1+dlen);
-
-            // 追加: Manufacturer を抽出
-            MfgInfo mfg = findMfg(data);
-
-            // JSON出力（mfgがあれば追加）
-            String json;
-            if (mfg != null) {
-                json = String.format(
-                "{\"src\":\"hci\",\"addr\":\"%s\",\"rssi\":%d,"
-                + "\"mfg\":{\"cid\":\"0x%04X\",\"data\":\"%s\"},"
-                + "\"raw\":\"%s\",\"ts\":\"%s\"}",
-                addr, rssi, mfg.cid, mfg.dataHex, data, java.time.Instant.now());
-            } else {
-                json = String.format(
-                "{\"src\":\"hci\",\"addr\":\"%s\",\"rssi\":%d,"
-                + "\"raw\":\"%s\",\"ts\":\"%s\"}",
-                addr, rssi, data, java.time.Instant.now());
-            }
-            System.out.println(json);
-        }
-    }
-
-    private void parsePerAdv(Pointer p, int pos, int len) {
-        if (len < 7) return;
-        int sync = Short.toUnsignedInt(p.getShort(pos)); pos+=2;
-        int tx   = (byte)p.getByte(pos++); 
-        int rssi = (byte)p.getByte(pos++);
-        int cte  = p.getByte(pos++) & 0xFF;
-        int st   = p.getByte(pos++) & 0xFF;
-        int dlen = p.getByte(pos++) & 0xFF;
-        String data = hex(p, pos, dlen);
-        System.out.printf("{\"src\":\"hci\",\"per\":%d,\"rssi\":%d,\"tx\":%d,\"raw\":\"%s\",\"ts\":\"%s\"}%n",
-                sync, rssi, tx, data, Instant.now());
-    }
-
-
-    // 16進 → byte[]
-    private static byte[] hexToBytes(String hex) {
-        int n = hex.length();
-        byte[] out = new byte[n/2];
-        for (int i = 0; i < n; i += 2) {
-            out[i/2] = (byte) Integer.parseInt(hex.substring(i, i+2), 16);
-        }
-        return out;
-    }
-
-    // ADデータ（連結TLV）から 0xFF を探して CID と残りペイロードを返す
-    private static class MfgInfo { final int cid; final String dataHex;
-        MfgInfo(int cid, String dataHex){ this.cid=cid; this.dataHex=dataHex; } }
-
-    private static MfgInfo findMfg(String adHex) {
-        if (adHex == null || adHex.isEmpty()) return null;
-        byte[] b = hexToBytes(adHex);
-        for (int i = 0; i < b.length; ) {
-            int len = b[i++] & 0xFF;             // L
-            if (len == 0) break;
-            if (i + len > b.length) break;       // 破損ガード
-            int type = b[i++] & 0xFF;            // T
-            int dlen = len - 1;                  // V長
-            if (type == 0xFF && dlen >= 2) {
-                int cid = (b[i] & 0xFF) | ((b[i+1] & 0xFF) << 8); // Little Endian
-                int rest = dlen - 2;
-                String dataHex = rest > 0 ? toHex(b, i + 2, rest) : "";
-                return new MfgInfo(cid, dataHex);
-            }
-            i += dlen; // 次のADへ
-        }
-        return null;
-    }
-
-    // 既存の hex() が Pointer用なら、byte[] 用の toHex も用意
-    private static String toHex(byte[] b, int off, int len) {
-        StringBuilder sb = new StringBuilder(len*2);
-        for (int k=0;k<len;k++) sb.append(String.format("%02x", b[off+k]));
-        return sb.toString();
-    }
 }
