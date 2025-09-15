@@ -26,14 +26,18 @@ public class AdStructure {
             int dlen = len - 1;                  // V長
             byte[] data = Arrays.copyOfRange(b, i, i+dlen);
             // String dataHex = BaseAdvParser.toHex(b, i, dlen);
-            if(type==0xff) {
-                adStructures.add(new ManufacuturarSpecific(type, data));
+            if(type==0x01) {
+                adStructures.add(new Flags(type, data));
+            } else if(type==0x02||type==0x03||type==0x04||type==0x05||type==0x06||type==0x07) {
+                adStructures.add(new Service(type, data));
             } else if(type==0x08||type==0x09) {
                 adStructures.add(new Name(type, data));
             } else if(type==0x0a) {
                 adStructures.add(new TxPowerLevel(type, data));
             } else if(type==0x16) {
                 adStructures.add(new ServiceData(type, data));
+            } else if(type==0xff) {
+                adStructures.add(new ManufacuturarSpecific(type, data));
             } else {
                 adStructures.add(new AdStructure(type, data));
             }
@@ -53,7 +57,7 @@ public class AdStructure {
         return sb.toString();
     }
     public String toJsonString() {
-        return String.format("{\"type\":\"0x%02x\",\"value\":\"%s\"}",type,BaseAdvParser.hex(data, 0, data.length));
+        return String.format("{\"UNKNOWN_TYPE\":\"0x%02x\",\"value\":\"%s\"}",type,BaseAdvParser.hex(data, 0, data.length));
     }
 
     public static class ManufacuturarSpecific extends AdStructure {
@@ -84,6 +88,23 @@ public class AdStructure {
             return String.format("{\"type\":\"0x%02x\",\"%s\":\"%s\"}",super.type, this.nameType, this.name);
         }
     }
+    public static class Service extends AdStructure {
+        private String uuidType;
+        private String uuid;
+        private Service(int type, byte[] b) {
+            super(type, b);
+            this.uuidType = type == 0x03 ? "more_16bit_uuids":
+                type == 0x04 ? "complete_16bit_uuids":
+                type == 0x05 ? "more_32bit_uuids":
+                type == 0x06 ? "complete_32bit_uuids":
+                type == 0x07 ? "more_128bit_uuids":"complete_128bit_uuids";
+            this.uuid = BaseAdvParser.hex(b, 0, b.length);
+        }
+        @Override
+        public String toJsonString() {
+            return String.format("{\"type\":\"0x%02x\",\"%s\":\"%s\"}",super.type, this.uuidType, this.uuid);
+        }
+    }
     public static class TxPowerLevel extends AdStructure {
         private int tx;
         private TxPowerLevel(int type, byte[] b) {
@@ -111,6 +132,40 @@ public class AdStructure {
         @Override
         public String toJsonString() {
             return String.format("{\"type\":\"0x%02x\",\"service_uuid\":\"%s\",\"service_data\":\"%s\"}",super.type, this.uuid, BaseAdvParser.hex(this.data, 0,this.data.length));
+        }
+    }
+    public static class Flags extends AdStructure {
+        private static int BLE_GAP_ADV_FLAG_LE_LIMITED_DISC_MODE = 0x01;
+        private static int BLE_GAP_ADV_FLAG_LE_GENERAL_DISC_MODE = 0x02;
+        private static int BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED = 0x04;
+        private static int BLE_GAP_ADV_FLAG_LE_BR_EDR_CONTROLLER = 0x08;
+        private static int BLE_GAP_ADV_FLAG_LE_BR_EDR_HOST = 0x10;
+        private int flags;
+        private boolean flag_le_limited_disc_mode;
+        private boolean flag_le_general_disc_mode;
+        private boolean flag_br_edr_not_supported;
+        private boolean flag_le_br_edr_controller;
+        private boolean flag_le_br_edr_host;
+        private String str;
+        private Flags(int type, byte[] b) {
+            super(type, b);
+            this.flags = (byte)b[0];
+            this.flag_le_limited_disc_mode = (this.flags & BLE_GAP_ADV_FLAG_LE_LIMITED_DISC_MODE)!=0;
+            this.flag_le_general_disc_mode = (this.flags & BLE_GAP_ADV_FLAG_LE_GENERAL_DISC_MODE)!=0;
+            this.flag_br_edr_not_supported = (this.flags & BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED)!=0;
+            this.flag_le_br_edr_controller = (this.flags & BLE_GAP_ADV_FLAG_LE_BR_EDR_CONTROLLER)!=0;
+            this.flag_le_br_edr_host = (this.flags & BLE_GAP_ADV_FLAG_LE_BR_EDR_HOST)!=0;
+            List<String> flgstrs = new ArrayList<>();
+            if (flag_le_limited_disc_mode) flgstrs.add("BLE_GAP_ADV_FLAG_LE_LIMITED_DISC_MODE");
+            if (flag_le_general_disc_mode) flgstrs.add("BLE_GAP_ADV_FLAG_LE_GENERAL_DISC_MODE");
+            if (flag_br_edr_not_supported) flgstrs.add("BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED");
+            if (flag_le_br_edr_controller) flgstrs.add("BLE_GAP_ADV_FLAG_LE_BR_EDR_CONTROLLER");
+            if (flag_le_br_edr_host) flgstrs.add("BLE_GAP_ADV_FLAG_LE_BR_EDR_HOST");
+            this.str = String.join("|", flgstrs);
+        }
+        @Override
+        public String toJsonString() {
+            return String.format("{\"type\":\"0x%02x\",\"flags\":\"0x%02x\",\"flags_str\":\"%s\"}",super.type, this.flags, this.str);
         }
     }
 }
