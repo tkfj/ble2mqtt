@@ -2,15 +2,21 @@ package jp.fjworks.ble2mqtt;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.util.Collection;
+import java.util.concurrent.BlockingQueue;
 
 import jnr.ffi.LibraryLoader;
 import jnr.ffi.Memory;
 import jnr.ffi.Pointer;
 import jp.fjworks.ble2mqtt.adv.Adv;
+import jp.fjworks.ble2mqtt.adv.AdvParser;
 import jp.fjworks.ble2mqtt.adv.AdvParsers;
 
 public final class HciMonitor implements AutoCloseable, Runnable {
+
+    BlockingQueue<Adv> outQ;
+    public HciMonitor(BlockingQueue<Adv> outQ) {
+        this.outQ = outQ;
+    }
     // ---- libc bindings ----
     public interface LibC {
         LibC INSTANCE = LibraryLoader.create(LibC.class).load("c");
@@ -82,11 +88,13 @@ public final class HciMonitor implements AutoCloseable, Runnable {
             int off = MON_HDR_SIZE;
             // HCI Event packet begins here: evt(1), plen(1), params...
 
-            Collection<Adv> advs = parser.parse(bbuf, off);
-            for(Adv adv: advs) {
-                System.out.println(adv.toJsonString());
-            }
+            parser.parse(bbuf, off, new AdvParser.OnParsedCallback() {
+                @Override
+                public void onParsed(Adv adv) {
+                    try {  outQ.put(adv); } catch (InterruptedException e) { };
+                    // System.out.println(adv.toJsonString());
+                }
+            });
         }
     }
-
 }

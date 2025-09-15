@@ -1,13 +1,12 @@
 package jp.fjworks.ble2mqtt.adv;
 
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.Collection;
 
 public class PeriodicAdvParser extends BaseAdvParser implements AdvParser {
     private int[] supportedTypes = new int[] { 0x0f };
     @Override
-    public Collection<Adv> parse(ByteBuffer bbuf, int offset, int len) {
+    public void parse(ByteBuffer bbuf, int offset, int len, OnParsedCallback callback) {
         int sync = Short.toUnsignedInt(bbuf.getShort(offset)); offset+=2;
         int tx   = (byte)bbuf.get(offset++); 
         int rssi = (byte)bbuf.get(offset++);
@@ -18,12 +17,11 @@ public class PeriodicAdvParser extends BaseAdvParser implements AdvParser {
 
         Collection<AdStructure> adStructures = AdStructure.parse(data);
 
-        return Arrays.asList((Adv)new Adv() {
+        callback.onParsed(new Adv() {
             @Override
             public int getTotalLength() {
                 return 7+dlen;
             }
-
             @Override
             public String toJsonString() {
                 return String.format(

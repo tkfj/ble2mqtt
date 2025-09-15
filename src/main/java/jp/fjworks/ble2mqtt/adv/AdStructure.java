@@ -57,7 +57,7 @@ public class AdStructure {
         return sb.toString();
     }
     public String toJsonString() {
-        return String.format("{\"UNKNOWN_TYPE\":\"0x%02x\",\"value\":\"%s\"}",type,BaseAdvParser.hex(data, 0, data.length));
+        return String.format("{\"type\":\"0x%02x\",\"UNKNOWN_VALUE\":\"%s\"}",type,BaseAdvParser.hex(data, 0, data.length));
     }
 
     public static class ManufacuturarSpecific extends AdStructure {

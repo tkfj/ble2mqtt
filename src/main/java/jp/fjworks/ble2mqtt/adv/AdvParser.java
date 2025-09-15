@@ -1,9 +1,11 @@
 package jp.fjworks.ble2mqtt.adv;
 
 import java.nio.ByteBuffer;
-import java.util.Collection;
 
 public interface AdvParser {
-    public Collection<Adv> parse(ByteBuffer bbuf, int offset, int len);
+    public void parse(ByteBuffer bbuf, int offset, int len, OnParsedCallback callback);
     public int[] getSupportedTypes();
+    public interface OnParsedCallback {
+        public void onParsed(Adv adv);
+    }
 }

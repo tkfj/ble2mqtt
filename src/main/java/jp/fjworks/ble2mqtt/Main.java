@@ -6,7 +6,11 @@ import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
+
+import jp.fjworks.ble2mqtt.adv.Adv;
 
 public class Main {
   public static void main(String[] args) throws Exception {
@@ -26,8 +30,29 @@ public class Main {
       }
     }
 
+    BlockingQueue<Adv> q = new ArrayBlockingQueue<>(1);
+
+    Runnable printer = new Runnable() {
+      @Override
+      public void run() {
+        try {
+          while(true) {
+            Adv adv = q.take();
+            System.out.println(adv.toJsonString());
+          }
+        }
+        catch (InterruptedException e) {
+          //nop break
+        }
+      }
+    };
+    Thread printerTh = new Thread(printer);
+    printerTh.setDaemon(true);
+    printerTh.start();
+
+
     // 既存: HciMonitor や MQTT ブリッジの起動…
-    HciMonitor hciMon = new HciMonitor();
+    HciMonitor hciMon = new HciMonitor(q);
     hciMon.start();
 
     Runtime.getRuntime().addShutdownHook(new Thread(() -> {
