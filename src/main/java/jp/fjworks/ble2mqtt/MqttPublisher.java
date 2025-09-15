@@ -15,7 +15,7 @@ import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import jp.fjworks.ble2mqtt.Main.MqttCfg;
 import jp.fjworks.ble2mqtt.adv.Adv;
 
-public class MqttPublisher implements Runnable, Closeable {
+public class MqttPublisher implements Runnable, AutoCloseable {
     private MqttClient client = null;
     private String cid;
     private String topic;
@@ -41,7 +41,7 @@ public class MqttPublisher implements Runnable, Closeable {
     private void publish(String payload) throws IOException {
         try {
             client.publish(topic, new MqttMessage(payload.getBytes(StandardCharsets.UTF_8)));
-            System.out.printf("[PUB] %s -> %s%n", topic, payload);
+            // System.out.printf("[PUB] %s -> %s%n", topic, payload);
         }
         catch (MqttException e) {
             throw new IOException(e);
