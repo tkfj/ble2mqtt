@@ -92,7 +92,7 @@ public class AdStructure {
         }
         @Override
         public String toJsonString() {
-            return String.format("{\"type\":\"0x%02x\",\"tx\":\"%d\"}",super.type, this.tx);
+            return String.format("{\"type\":\"0x%02x\",\"tx\":%d}",super.type, this.tx);
         }
     }
     public static class ServiceData extends AdStructure {
@@ -101,7 +101,12 @@ public class AdStructure {
         private ServiceData(int type, byte[] b) {
             super(type, b);
             this.uuid = BaseAdvParser.hex(b, 0, 2);
-            this.data = Arrays.copyOfRange(b, 2, b.length-2);
+            if(b.length>2) {
+                this.data = Arrays.copyOfRange(b, 2, b.length);
+            }
+            else {
+                this.data = new byte[0];
+            }
         }
         @Override
         public String toJsonString() {
