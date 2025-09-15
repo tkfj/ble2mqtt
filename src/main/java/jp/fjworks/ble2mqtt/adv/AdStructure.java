@@ -81,7 +81,7 @@ public class AdStructure {
         }
         @Override
         public String toJsonString() {
-            return String.format("{\"type\":\"0x%02x\",\"name_type\":\"%s\",\"name\":\"%s\"}",super.type, this.nameType, this.name);
+            return String.format("{\"type\":\"0x%02x\",\"%s\":\"%s\"}",super.type, this.nameType, this.name);
         }
     }
     public static class TxPowerLevel extends AdStructure {
